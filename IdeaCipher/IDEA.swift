@@ -87,21 +87,24 @@ extension UInt32{
 
 
 struct IDEACipher {
-
-	var encryptionKeys = [UInt32](count: 52, repeatedValue: 0)
-	var decryptionKeys = [UInt32](count:52, repeatedValue: 0)
+	
+	static let numRounds = 8
+	static let keysPerRound = 6
+	static let keyCount = IDEACipher.numRounds * IDEACipher.keysPerRound + 4
+	var encryptionKeys = [UInt32](count: IDEACipher.keyCount, repeatedValue: 0)
+	var decryptionKeys = [UInt32](count:IDEACipher.keyCount, repeatedValue: 0)
 	init(key:[UInt8]){
 		
 		// initialize the encryption keys.  The first 8 key values come from the 16
 		// user-supplied key bytes.
-		for  i in 0...7{
+		for  i in 0...(IDEACipher.numRounds - 1){
 			encryptionKeys[i] =
 				(UInt32( key[2 * i] & 0xff ) << 8 ) | UInt32( key[ 2 * i + 1] & 0xff );
 		}
 		
 		// Subsequent key values are the previous values rotated to the
 		// left by 25 bits.
-		for i in 8...51{
+		for i in IDEACipher.numRounds...(IDEACipher.keyCount - 1){
 			encryptionKeys[i] =
 			( ( encryptionKeys[i - 8] << 9 ) |
 			( encryptionKeys[i - 7] >> 7 ) ) & 0xffff;
@@ -113,9 +116,9 @@ struct IDEACipher {
 			let t1 = ⩪self.encryptionKeys[lower]
 			let t2 = -self.encryptionKeys[lower + 1]
 			let t3 = -self.encryptionKeys[lower + 2]
-			self.decryptionKeys[upper] =
-				⩪self.encryptionKeys[lower + 3]
-			if upper < 48 && upper > 3{
+			self.decryptionKeys[upper] = ⩪self.encryptionKeys[lower + 3]
+			
+			if upper < IDEACipher.keyCount - 4  && upper >= 4{
 				self.decryptionKeys[upper - 1] = t2;
 				self.decryptionKeys[upper - 2] = t3;
 			} else {
@@ -125,16 +128,16 @@ struct IDEACipher {
 			self.decryptionKeys[upper - 3] = t1;
 		}
 		
-		setDecryptionKeys(startIndex:51, endIndex:0)
+		setDecryptionKeys(startIndex:0, endIndex:IDEACipher.keyCount - 1)
 		
-		for round in 0...7
+		for round in 0..<IDEACipher.numRounds
 		{
-			let upper = 51 - (6*round) - 4
-			let lower = 6*round + 4
+			let upper = IDEACipher.keyCount - (IDEACipher.keysPerRound*round) - 5
+			let lower = IDEACipher.keysPerRound*round + 4
 			let t1 = encryptionKeys[lower];
 			decryptionKeys[upper] = encryptionKeys[lower + 1];
 			decryptionKeys[upper - 1] = t1;
-			setDecryptionKeys(startIndex:upper - 2, endIndex: lower + 2)
+			setDecryptionKeys(startIndex:lower + 2, endIndex: upper - 2)
 		}
 	}
 	
